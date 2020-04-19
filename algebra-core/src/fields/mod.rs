@@ -372,3 +372,45 @@ pub fn batch_inversion<F: Field>(v: &mut [F]) {
         tmp = new_tmp;
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use curv::{FE,BigInt};
+    use curv::elliptic::curves::traits::ECScalar;
+    use crate::BigInteger256 as BigInteger;
+    use curv::arithmetic::traits::Converter;
+
+    const MODULUS: BigInteger = BigInteger([
+        0xFFFFFFFFFFFFFFFF,
+        0xFFFFFFFFFFFFFFFE,
+        0xBAAEDCE6AF48A03B,
+        0xBFD25E8CD0364141,
+
+    ]);
+
+
+        #[test]
+    fn test_fpcurv_char() {
+            let q_bn = FE::q();
+            let mut u64_limbs: Vec<u64> =  Vec::new();
+            // assuming size of field element is between 192-256 bits
+            let two = BigInt::from(2);
+            let mut arr = [0u8;8];
+            let filter: BigInt = two.pow(64) - BigInt::one();
+            u64_limbs = (0..4).map(|i|{
+                let limb_bn : BigInt =  ( q_bn.clone() >> ( 64 * i)) & filter.clone();
+                let mut bytes = BigInt::to_vec(&limb_bn);
+                bytes.reverse();
+                arr.copy_from_slice(&bytes[..]);
+                u64::from_le_bytes(arr.clone())
+            }).collect::<Vec<u64>>();
+            println!("modul: {:?}", MODULUS);
+            println!("limb: {:?}", u64_limbs);
+            assert!(false);
+
+        }
+
+
+}

@@ -291,9 +291,9 @@ mod test {
     use crate::Vec;
     #[test]
     fn test_macro_empty() {
-        let array: Vec<u8> = vec![];
+        let array: Vec<u8> = Vec::new();
         let bytes: Vec<u8> = to_bytes![array].unwrap();
-        assert_eq!(&bytes, &[]);
+        assert_eq!(&bytes[..], &array[..]);
         assert_eq!(bytes.len(), 0);
     }
 

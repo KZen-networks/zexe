@@ -2,29 +2,35 @@ use num_traits::{One, Zero};
 use core::{
     cmp::{Ord, Ordering, PartialOrd},
     fmt::{Display, Formatter, Result as FmtResult},
-    io::{Read, Result as IoResult, Write},
-    marker::PhantomData,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     str::FromStr,
 };
-
 use crate::{
-    biginteger::{arithmetic as fa, BigInteger as _BigInteger, BigInteger256 as BigInteger},
+    io::{Read, Result as IoResult, Write},
+    CanonicalDeserialize, CanonicalDeserializeWithFlags, CanonicalSerialize,
+    CanonicalSerializeWithFlags, ConstantSerializedSize, EmptyFlags, Flags, SerializationError,
+    UniformRand,
+};
+use crate::{
+ //   biginteger::{arithmetic as fa, BigInteger as _BigInteger, BigInteger256 as BigInteger},
+    BigInteger256 as BigInteger,
     bytes::{FromBytes, ToBytes},
     fields::{Field, FpParameters, LegendreSymbol, PrimeField, SquareRootField},
 };
 use curv::{FE,BigInt};
 use curv::elliptic::curves::traits::ECScalar;
-use core::fmt::Write;
-use crate::io::Read;
-use serde::ser::Serialize;
+
 use curv::arithmetic::traits::Converter;
+
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
+use core::hash::{Hash, Hasher};
 
 
 #[derive(Derivative)]
 #[derivative(
-Default(bound = ""),
-Hash(bound = ""),
 Clone(bound = ""),
 Copy(bound = ""),
 Debug(bound = ""),
@@ -111,7 +117,101 @@ impl<P: Fp256Parameters> Fp256<P> {
     }
 }
 */
+impl Default for FpCurv {
+    fn default() -> Self {
+        FpCurv(FE::zero())
+    }
+}
+// TODO: make sure this is not used
+impl Hash for FpCurv {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        unimplemented!();
+ //       let zero :u32 = 0;
+ //       zero.hash(state);
+    }
+}
 
+impl UniformRand for FpCurv {
+    fn rand<R: Rng + ?Sized>(rng: &mut R) -> Self{
+        FpCurv(ECScalar::new_random())
+    }
+}
+
+impl CanonicalDeserialize for FpCurv {
+    #[inline]
+    fn deserialize<R: Read>(reader: &mut R) -> Result<Self, SerializationError> {
+        let mut bytes = [0u8; 32];
+        reader.read_exact(&mut bytes)?;
+        let v = BigInt::from(&bytes[..]);
+        let fe: FE =ECScalar::from(&v);
+        Ok(FpCurv(fe))
+    }
+}
+
+
+impl ConstantSerializedSize for FpCurv {
+    const SERIALIZED_SIZE: usize = 32;
+    const UNCOMPRESSED_SIZE: usize = Self::SERIALIZED_SIZE;
+}
+
+
+
+impl CanonicalDeserializeWithFlags for FpCurv {
+    /// Reads `Self` and `Flags` from `reader`.
+    /// Returns empty flags by default.
+    fn deserialize_with_flags<R: Read, F: Flags>(
+        reader: &mut R,
+    ) -> Result<(Self, F), SerializationError>{
+        let mut bytes = [0u8; 32];
+        reader.read_exact(&mut bytes)?;
+        let v = BigInt::from(&bytes[..]);
+        let fe: FE =ECScalar::from(&v);
+        // TODO: make sure not used
+        let flags = F::from_u8_remove_flags(&mut bytes[0]);
+        Ok((FpCurv(fe),flags))
+    }
+}
+
+/// Serializer in little endian format allowing to encode flags.
+impl CanonicalSerializeWithFlags for FpCurv {
+    /// Serializes `self` and `flags` into `writer`.
+    fn serialize_with_flags<W: Write, F: Flags>(
+        &self,
+        writer: &mut W,
+        flags: F,
+    ) -> Result<(), SerializationError>{
+        let bn = self.0.to_big_int();
+        let bytes = BigInt::to_vec(&bn);
+        Ok(writer.write_all(&bytes[..])?)
+    }
+}
+
+impl CanonicalSerialize for FpCurv {
+    #[inline]
+    fn serialize<W: Write>(&self, writer: &mut W) -> Result<(), SerializationError> {
+        let bn = self.0.to_big_int();
+        let bytes = BigInt::to_vec(&bn);
+        Ok(writer.write_all(&bytes[..])?)
+    }
+
+    #[inline]
+    fn serialized_size(&self) -> usize {
+        Self::SERIALIZED_SIZE
+    }
+}
+/*
+    /// Serializes `self` into `writer` without compression.
+    #[inline]
+    fn serialize_uncompressed<W: Write>(&self, writer: &mut W) -> Result<(), SerializationError> {
+        self.serialize(writer)
+    }
+    #[inline]
+    fn uncompressed_size(&self) -> usize {
+        self.serialized_size()
+    }
+
+}
+*/
 impl Zero for FpCurv {
     #[inline]
     fn zero() -> Self {
@@ -136,18 +236,33 @@ impl One for FpCurv{
     }
 }
 
+
+const MODULUS: BigInteger = BigInteger([
+    0xFFFFFFFFFFFFFFFF,
+    0xFFFFFFFFFFFFFFFE,
+    0xBAAEDCE6AF48A03B,
+    0xBFD25E8CD0364141,
+]);
+
 impl Field for FpCurv {
 
+    // TODO: ask for change upstream
     #[inline]
     fn characteristic<'a>() -> &'a [u64] {
-        let mut q_bn = FE::q();
+        let q_bn = FE::q();
+        let mut u64_limbs: Vec<u64> =  Vec::new();
         // assuming size of field element is between 192-256 bits
         let two = BigInt::from(2);
-        let mut filter = two.pow(64) - BigInt::one();
-        let u64_limbs = (0..4).map(|i|{
-            ( q_bn >> ( 64 * i)) && filter
+        let mut arr = [0u8;8];
+        let filter = two.pow(64) - BigInt::one();
+        u64_limbs = (0..4).map(|i|{
+            let limb_bn : BigInt =  ( q_bn.clone() >> ( 64 * i)) & filter.clone();
+            let mut bytes = BigInt::to_vec(&limb_bn);
+            bytes.reverse();
+            arr.copy_from_slice(&bytes[..]);
+            u64::from_le_bytes(arr.clone())
         }).collect::<Vec<u64>>();
-        &u64_limbs[..]
+        MODULUS.as_ref()
     }
 
 
@@ -292,30 +407,45 @@ impl_prime_field_standard_sample!(Fp256, Fp256Parameters);
 //TODO
 impl ToBytes for FpCurv {
     #[inline]
-    fn write<W: Write>(&self, writer: W) -> IoResult<()> {
-        write!(self.0.to_big_int().to_hex());
-        Ok(())
+    fn write<W: Write>(&self,mut writer: W) -> IoResult<()> {
+       // let bn = self.0.to_big_int();
+       // let bytes = BigInt::to_vec(&bn);
+       // write!(writer, "{}", &bytes[..])
+
+        let bn = self.0.to_big_int();
+        let bytes = BigInt::to_vec(&bn);
+        Ok(writer.write_all(&bytes[..])?)
+
     }
 }
 
 impl FromBytes for FpCurv {
     #[inline]
-    fn read<R: Read>(reader: R) -> IoResult<Self> {
-
-        let v = BigInt::from_str_radix(reader, 16).expect("Failed in serde");
-        Ok(FpCurv(ECScalar::from(&v))   ) }
-}
-
-//TODO
-/// `Fp` elements are ordered lexicographically.
-impl<P: Fp256Parameters> Ord for Fp256<P> {
-    #[inline(always)]
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.into_repr().cmp(&other.into_repr())
+    fn read<R: Read>(mut reader: R) -> IoResult<Self> {
+        let mut bytes = [0u8; 32];
+        reader.read_exact(&mut bytes)?;
+        let v = BigInt::from(&bytes[..]);
+        let fe: FE = ECScalar::from(&v);
+        Ok(FpCurv(fe))
     }
 }
-//TODO
-impl<P: Fp256Parameters> PartialOrd for Fp256<P> {
+
+
+/// `Fp` elements are ordered lexicographically.
+impl Ord for FpCurv {
+    #[inline(always)]
+    fn cmp(&self, other: &Self) -> Ordering {
+        let a = self.0.to_big_int();
+        let b = other.0.to_big_int();
+        if a < b {
+            return core::cmp::Ordering::Less;
+        } else if a > b {
+            return core::cmp::Ordering::Greater;
+        }
+    core::cmp::Ordering::Equal
+    }
+}
+impl PartialOrd for FpCurv {
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -336,7 +466,7 @@ impl FromStr for FpCurv {
 impl Display for FpCurv {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "({})", self.0)
+        write!(f, "({})", self.0.get_element())
     }
 }
 
@@ -346,7 +476,7 @@ impl Neg for FpCurv {
     #[must_use]
     fn neg(self) -> Self {
         let neg_bn = FE::q() - &self.0.to_big_int();
-        let neg_fe :FE = ECScalar::from(neg_bn);
+        let neg_fe :FE = ECScalar::from(&neg_bn);
         FpCurv(neg_fe)
     }
 }
@@ -358,7 +488,7 @@ impl Add<FpCurv> for FpCurv {
     fn add(self, other: Self) -> Self {
 
         let mut result = self;
-        result.0 = result.0 + result.0;
+        result.0 = result.0 + other.0;
         result
     }
 }
@@ -369,116 +499,162 @@ impl<'a> Add<&'a FpCurv> for FpCurv {
     #[inline]
     fn add(self, other: &Self) -> Self {
         let mut result = self;
-        result.0 = result.0 + result.0;
+        result.0 = result.0 + other.0;
         result
     }
 }
 
 
-//TODO
-impl<'a, P: Fp256Parameters> Sub<&'a Fp256<P>> for Fp256<P> {
+impl Sub<FpCurv> for FpCurv {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, other: Self) -> Self {
+        let mut result = self;
+        result.0 = result.0.sub( &other.0.get_element());
+        result
+    }
+}
+
+
+impl<'a> Sub<&'a FpCurv> for FpCurv {
     type Output = Self;
 
     #[inline]
     fn sub(self, other: &Self) -> Self {
         let mut result = self;
-        result.sub_assign(other);
+        result.0 = result.0.sub( &other.0.get_element());
         result
     }
 }
 
-impl<P: Fp256Parameters> Mul<Fp256<P>> for Fp256<P> {
+impl Mul<FpCurv> for FpCurv {
     type Output = Self;
 
     #[inline]
     fn mul(self, other: Self) -> Self {
         let mut result = self;
-        result.mul_assign(&other);
+        result.0 = result.0 * other.0;
         result
     }
 }
 
-impl<'a, P: Fp256Parameters> Mul<&'a Fp256<P>> for Fp256<P> {
+impl<'a> Mul<&'a FpCurv> for FpCurv {
     type Output = Self;
 
     #[inline]
     fn mul(self, other: &Self) -> Self {
         let mut result = self;
-        result.mul_assign(other);
+        result.0 = result.0 * other.0;
         result
     }
 }
 
-impl<'a, P: Fp256Parameters> Div<&'a Fp256<P>> for Fp256<P> {
+impl Div<FpCurv> for FpCurv {
+    type Output = Self;
+
+    #[inline]
+    fn div(self, other: Self) -> Self {
+        let mut result = self;
+        result.0 = result.0 * &other.0.invert();
+        result
+    }
+}
+
+impl<'a> Div<&'a FpCurv> for FpCurv {
     type Output = Self;
 
     #[inline]
     fn div(self, other: &Self) -> Self {
         let mut result = self;
-        result.mul_assign(&other.inverse().unwrap());
+        result.0 = result.0 * other.0.invert();
         result
     }
 }
 
-impl_addassign_from_ref!(Fp256, Fp256Parameters);
-impl<'a, P: Fp256Parameters> AddAssign<&'a Self> for Fp256<P> {
+//impl_addassign_from_ref!(Fp256, Fp256Parameters);
+
+impl AddAssign<Self> for FpCurv {
+    #[inline]
+    fn add_assign(&mut self, other: Self) {
+        self.0 = self.0 + &other.0;
+    }
+}
+
+impl<'a> AddAssign<&'a Self> for FpCurv {
     #[inline]
     fn add_assign(&mut self, other: &Self) {
-        // This cannot exceed the backing capacity.
-        self.0.add_nocarry(&other.0);
-        // However, it may need to be reduced
-
-        self.reduce();
+        self.0 = self.0 + other.0;
     }
 }
 
-impl<'a, P: Fp256Parameters> SubAssign<&'a Self> for Fp256<P> {
+impl SubAssign<Self> for FpCurv {
+    #[inline]
+    fn sub_assign(&mut self, other: Self) {
+        self.0 = self.0.sub(&other.0.get_element());
+    }
+}
+
+impl<'a> SubAssign<&'a Self> for FpCurv {
     #[inline]
     fn sub_assign(&mut self, other: &Self) {
-        // If `other` is larger than `self`, add the modulus to self first.
-        if other.0 > self.0 {
-            self.0.add_nocarry(&P::MODULUS);
-        }
-
-        self.0.sub_noborrow(&other.0);
+        self.0 = self.0.sub(&other.0.get_element());
     }
 }
 
-impl_mulassign_from_ref!(Fp256, Fp256Parameters);
-impl<'a, P: Fp256Parameters> MulAssign<&'a Self> for Fp256<P> {
+impl MulAssign<Self> for FpCurv {
+    #[inline]
+    fn mul_assign(&mut self, other: Self) {
+        self.0 = self.0 * &other.0;
+    }
+}
+
+impl<'a> MulAssign<&'a Self> for FpCurv {
     #[inline]
     fn mul_assign(&mut self, other: &Self) {
-        let mut carry = 0;
-        let r0 = fa::mac_with_carry(0, (self.0).0[0], (other.0).0[0], &mut carry);
-        let r1 = fa::mac_with_carry(0, (self.0).0[0], (other.0).0[1], &mut carry);
-        let r2 = fa::mac_with_carry(0, (self.0).0[0], (other.0).0[2], &mut carry);
-        let r3 = fa::mac_with_carry(0, (self.0).0[0], (other.0).0[3], &mut carry);
-        let r4 = carry;
-        let mut carry = 0;
-        let r1 = fa::mac_with_carry(r1, (self.0).0[1], (other.0).0[0], &mut carry);
-        let r2 = fa::mac_with_carry(r2, (self.0).0[1], (other.0).0[1], &mut carry);
-        let r3 = fa::mac_with_carry(r3, (self.0).0[1], (other.0).0[2], &mut carry);
-        let r4 = fa::mac_with_carry(r4, (self.0).0[1], (other.0).0[3], &mut carry);
-        let r5 = carry;
-        let mut carry = 0;
-        let r2 = fa::mac_with_carry(r2, (self.0).0[2], (other.0).0[0], &mut carry);
-        let r3 = fa::mac_with_carry(r3, (self.0).0[2], (other.0).0[1], &mut carry);
-        let r4 = fa::mac_with_carry(r4, (self.0).0[2], (other.0).0[2], &mut carry);
-        let r5 = fa::mac_with_carry(r5, (self.0).0[2], (other.0).0[3], &mut carry);
-        let r6 = carry;
-        let mut carry = 0;
-        let r3 = fa::mac_with_carry(r3, (self.0).0[3], (other.0).0[0], &mut carry);
-        let r4 = fa::mac_with_carry(r4, (self.0).0[3], (other.0).0[1], &mut carry);
-        let r5 = fa::mac_with_carry(r5, (self.0).0[3], (other.0).0[2], &mut carry);
-        let r6 = fa::mac_with_carry(r6, (self.0).0[3], (other.0).0[3], &mut carry);
-        let r7 = carry;
-        self.mont_reduce(r0, r1, r2, r3, r4, r5, r6, r7);
+        self.0 = self.0 * other.0;
     }
 }
 
-impl<'a, P: Fp256Parameters> DivAssign<&'a Self> for Fp256<P> {
+impl DivAssign<Self> for FpCurv {
+    #[inline]
+    fn div_assign(&mut self, other: Self) {
+        self.0 = self.0 * &other.0.invert();
+    }
+}
+
+impl<'a> DivAssign<&'a Self> for FpCurv {
     #[inline]
     fn div_assign(&mut self, other: &Self) {
-        self.mul_assign(&other.inverse().unwrap());
+        self.0 = self.0 * other.0.invert();
     }
+}
+
+
+
+
+impl core::iter::Sum<Self> for FpCurv {
+fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+iter.fold(Self::zero(), |acc,x |FpCurv(x.0 + acc.0))
+}
+}
+
+#[allow(unused_qualifications)]
+impl<'a> core::iter::Sum<&'a Self> for FpCurv {
+fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+iter.fold(Self::zero(), |acc,x |FpCurv(x.0 + acc.0))
+
+}
+}
+
+impl core::iter::Product<Self> for FpCurv {
+fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+    iter.fold(Self::one(), |acc,x | FpCurv(acc.0 * x.0))
+}
+}
+
+impl<'a> core::iter::Product<&'a Self> for FpCurv {
+fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+iter.fold(Self::one(), |acc,x | FpCurv(acc.0 * x.0))
+}
 }
