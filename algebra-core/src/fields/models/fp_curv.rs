@@ -37,7 +37,7 @@ Debug(bound = ""),
 PartialEq(bound = ""),
 Eq(bound = "")
 )]
-pub struct FpCurv(FE);
+pub struct FpCurv(pub FE);
 /*
 impl<P> Fp256<P> {
     #[inline]
