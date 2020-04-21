@@ -51,10 +51,10 @@ macro_rules! cfg_iter_mut {
 #[macro_export]
 macro_rules! cfg_into_iter {
     ($e: expr) => {{
-        #[cfg(feature = "parallel")]
-        let result = $e.into_par_iter();
+     //   #[cfg(feature = "parallel")]
+     //   let result = $e.into_par_iter();
 
-        #[cfg(not(feature = "parallel"))]
+    //    #[cfg(not(feature = "parallel"))]
         let result = $e.into_iter();
 
         result
