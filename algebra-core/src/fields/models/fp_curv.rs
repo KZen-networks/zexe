@@ -27,7 +27,8 @@ use rand::{
     Rng,
 };
 use core::hash::{Hash, Hasher};
-
+use std::ops::Shl;
+use crate::io::Cursor;
 
 #[derive(Derivative)]
 #[derivative(
@@ -39,7 +40,7 @@ Eq(bound = "")
 )]
 pub struct FpCurv(pub FE);
 /*
-impl<P> Fp256<P> {
+impl FpCurv {
     #[inline]
     pub const fn new(element: BigInteger) -> Self {
         Self(element, PhantomData)
@@ -317,51 +318,66 @@ impl Field for FpCurv {
 
 
 }
-/*
-impl<P: Fp256Parameters> PrimeField for Fp256<P> {
-    type Params = P;
+
+fn zexe_biginteger_to_curv_bigint(src: &BigInteger) -> BigInt{
+    //TODO: improve:
+    let mut bytes: Vec<u8> = Vec::new();
+    src.write( &mut bytes).unwrap();
+   // src.serialize(&mut bytes);
+    BigInt::from(&bytes[..])
+
+}
+
+
+fn curv_bigint_to_zexe_biginteger(src: &BigInt) -> BigInteger{
+    let bytes = BigInt::to_vec(src);
+    let cur = Cursor::new(bytes);
+    //let value = BigInteger::from(&bytes[..]);
+  //  let buf = [0u8;32];
+  //  buf.copy_from_slice(&bytes[..]);
+    let value = BigInteger::read(cur).unwrap();
+    //BigInteger::read(bytes)
+    value
+
+}
+
+impl PrimeField for FpCurv {
+    type Params = JubjubParameters;
     type BigInt = BigInteger;
 
     #[inline]
-    fn from_repr(r: BigInteger) -> Self {
-        let mut r = Fp256(r, PhantomData);
-        if r.is_valid() {
-            r.mul_assign(&Fp256(P::R2, PhantomData));
-            r
-        } else {
-            Self::zero()
-        }
+    fn from_repr(repr: <Self::Params as FpParameters>::BigInt) -> Self{
+        let bn = zexe_biginteger_to_curv_bigint(&repr);
+        FpCurv(ECScalar::from(&bn))
     }
 
+
     #[inline]
-    fn into_repr(&self) -> BigInteger {
-        let mut r = *self;
-        r.mont_reduce(
-            (self.0).0[0],
-            (self.0).0[1],
-            (self.0).0[2],
-            (self.0).0[3],
-            0,
-            0,
-            0,
-            0,
-        );
-        r.0
+    fn into_repr(&self) -> Self::BigInt{
+        let fe= self.0.clone();
+        let bn = fe.to_big_int();
+        curv_bigint_to_zexe_biginteger(&bn)
     }
 
 
 
     #[inline]
     fn multiplicative_generator() -> Self {
-        Fp256::<P>(P::GENERATOR, PhantomData)
+        let rou_bn = zexe_biginteger_to_curv_bigint(&Self::Params::GENERATOR);
+        FpCurv(ECScalar::from(&rou_bn))
     }
 
     #[inline]
     fn root_of_unity() -> Self {
-        Fp256::<P>(P::ROOT_OF_UNITY, PhantomData)
+        let rou_bn = zexe_biginteger_to_curv_bigint(&Self::Params::ROOT_OF_UNITY);
+        FpCurv(ECScalar::from(&rou_bn))
+
     }
+
 }
 
+
+/*
 impl<P: Fp256Parameters> SquareRootField for Fp256<P> {
     #[inline]
     fn legendre(&self) -> LegendreSymbol {
@@ -393,15 +409,84 @@ impl<P: Fp256Parameters> SquareRootField for Fp256<P> {
         }
     }
 }
+*/
 
+impl Into<BigInteger> for FpCurv{
+    fn into(self) -> BigInteger{
+        Self::into_repr(&self)
+    }
+
+}
+
+impl From<BigInteger> for FpCurv{
+    fn from(other: BigInteger) -> Self{
+        Self::from_repr(other)
+    }
+}
+
+impl From<u128> for FpCurv{
+    fn from(other: u128) -> Self{
+        let upper = (other >> 64) as u64;
+        let lower = ((other << 64) >> 64) as u64;
+        let mut default_int = BigInteger::default();
+        default_int.0[0] = lower;
+        default_int.0[1] = upper;
+        Self::from_repr(default_int)
+    }
+}
+
+impl From<u8> for FpCurv{
+    fn from(other: u8) -> Self{
+        Self::from_repr(BigInteger::from(u64::from(other)))
+    }
+}
+impl From<u16> for FpCurv{
+    fn from(other: u16) -> Self{
+        Self::from_repr(BigInteger::from(u64::from(other)))
+    }
+}
+impl From<u32> for FpCurv{
+    fn from(other: u32) -> Self{
+        Self::from_repr(BigInteger::from(u64::from(other)))
+    }
+}
+impl From<u64> for FpCurv{
+    fn from(other: u64) -> Self{
+        Self::from_repr(BigInteger::from(u64::from(other)))
+    }
+}
+
+/*
+macro_rules! impl_fp_curv_prime_field_from_int {
+    ($field: ident, u128,$params: ident) => {
+        impl<P: $params>  From<u128> for $field {
+            fn from(other: u128) -> Self {
+                let upper = (other >> 64) as u64;
+                let lower = ((other << 64) >> 64) as u64;
+                let mut default_int = BigInt::default();
+                default_int.0[0] = lower;
+                default_int.0[1] = upper;
+                Self::from_repr(default_int)
+            }
+        }
+    };
+    ($field: ident, $int: ident,$params: ident) => {
+        impl<P: $params>  From<$int> for $field {
+            fn from(other: $int) -> Self {
+                Self::from_repr(P::BigInt::from(u64::from(other)))
+            }
+        }
+    };
+}
 */
 /*
-impl_prime_field_from_int!(Fp256, u128, Fp256Parameters);
-impl_prime_field_from_int!(Fp256, u64, Fp256Parameters);
-impl_prime_field_from_int!(Fp256, u32, Fp256Parameters);
-impl_prime_field_from_int!(Fp256, u16, Fp256Parameters);
-impl_prime_field_from_int!(Fp256, u8, Fp256Parameters);
-
+impl_prime_field_from_int!(FpCurv, u128, FpParameters);
+impl_prime_field_from_int!(FpCurv, u64, FpParameters);
+impl_prime_field_from_int!(FpCurv, u32, FpParameters);
+impl_prime_field_from_int!(FpCurv, u16, FpParameters);
+impl_prime_field_from_int!(FpCurv, u8, FpParameters);
+*/
+/*
 impl_prime_field_standard_sample!(Fp256, Fp256Parameters);
 */
 //TODO
@@ -658,3 +743,83 @@ fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
 iter.fold(Self::one(), |acc,x | FpCurv(acc.0 * x.0))
 }
 }
+
+
+
+
+
+
+pub struct JubjubParameters;
+
+impl FpParameters for JubjubParameters {
+    type BigInt = BigInteger;
+
+    /// MODULUS = 6554484396890773809930967563523245729705921265872317281365359162392183254199.
+    #[rustfmt::skip]
+    const MODULUS: BigInteger = BigInteger([
+        0xd0970e5ed6f72cb7,
+        0xa6682093ccc81082,
+        0x6673b0101343b00,
+        0xe7db4ea6533afa9,
+    ]);
+
+    const MODULUS_BITS: u32 = 252;
+
+    const CAPACITY: u32 = Self::MODULUS_BITS - 1;
+
+    const REPR_SHAVE_BITS: u32 = 4;
+
+    #[rustfmt::skip]
+    const R: BigInteger = BigInteger([
+        0x25f80bb3b99607d9,
+        0xf315d62f66b6e750,
+        0x932514eeeb8814f4,
+        0x9a6fc6f479155c6,
+    ]);
+
+    #[rustfmt::skip]
+    const R2: BigInteger = BigInteger([
+        0x67719aa495e57731,
+        0x51b0cef09ce3fc26,
+        0x69dab7fac026e9a5,
+        0x4f6547b8d127688,
+    ]);
+
+    const INV: u64 = 0x1ba3a358ef788ef9;
+
+    #[rustfmt::skip]
+    const GENERATOR: BigInteger = BigInteger([
+        0x720b1b19d49ea8f1,
+        0xbf4aa36101f13a58,
+        0x5fa8cc968193ccbb,
+        0xe70cbdc7dccf3ac,
+    ]);
+
+    const TWO_ADICITY: u32 = 1;
+
+    #[rustfmt::skip]
+    const ROOT_OF_UNITY: BigInteger = BigInteger([
+        0xaa9f02ab1d6124de,
+        0xb3524a6466112932,
+        0x7342261215ac260b,
+        0x4d6b87b1da259e2,
+    ]);
+
+    const MODULUS_MINUS_ONE_DIV_TWO: BigInteger = BigInteger([
+        7515249040934278747,
+        5995434913520945217,
+        9454073218019761536,
+        522094803716528084,
+    ]);
+
+    const T: BigInteger = Self::MODULUS_MINUS_ONE_DIV_TWO;
+
+    const T_MINUS_ONE_DIV_TWO: BigInteger = BigInteger([
+        12980996557321915181,
+        2997717456760472608,
+        4727036609009880768,
+        261047401858264042,
+    ]);
+
+}
+
