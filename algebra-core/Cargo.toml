@@ -31,8 +31,8 @@ rayon = { version = "1", optional = true }
 unroll = "0.1.4"
 [dependencies.curv]
 git = "https://github.com/KZen-networks/curv"
-tag = "v0.2.5"
-features = ["ec_jubjub"]
+tag = "v0.2.6"
+features = ["ec_bls12_381"]
 [dev-dependencies]
 rand_xorshift = "0.2"
 
