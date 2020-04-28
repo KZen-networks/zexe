@@ -21,7 +21,7 @@ use curv::{FE,BigInt};
 use curv::elliptic::curves::traits::ECScalar;
 
 use curv::arithmetic::traits::Converter;
-
+use curv::arithmetic::traits::Modulo;
 use rand::{
     distributions::{Distribution, Standard},
     Rng,
@@ -137,6 +137,13 @@ impl UniformRand for FpCurv {
         FpCurv(ECScalar::new_random())
     }
 }
+/*
+impl Distribution<FpCurv> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FpCurv {
+        FpCurv(ECScalar::new_random())
+    }
+}
+*/
 
 impl CanonicalDeserialize for FpCurv {
     #[inline]
@@ -323,6 +330,7 @@ fn zexe_biginteger_to_curv_bigint(src: &BigInteger) -> BigInt{
     //TODO: improve:
     let mut bytes: Vec<u8> = Vec::new();
     src.write( &mut bytes).unwrap();
+    bytes.reverse();
    // src.serialize(&mut bytes);
     BigInt::from(&bytes[..])
 
@@ -330,7 +338,8 @@ fn zexe_biginteger_to_curv_bigint(src: &BigInteger) -> BigInt{
 
 
 fn curv_bigint_to_zexe_biginteger(src: &BigInt) -> BigInteger{
-    let bytes = BigInt::to_vec(src);
+    let mut bytes = BigInt::to_vec(src);
+    bytes.reverse();
     let cur = Cursor::new(bytes);
     //let value = BigInteger::from(&bytes[..]);
   //  let buf = [0u8;32];
@@ -363,14 +372,20 @@ impl PrimeField for FpCurv {
 
     #[inline]
     fn multiplicative_generator() -> Self {
-        let rou_bn = zexe_biginteger_to_curv_bigint(&Self::Params::GENERATOR);
-        FpCurv(ECScalar::from(&rou_bn))
+        let mg = zexe_biginteger_to_curv_bigint(&Self::Params::GENERATOR);
+        let R2 = zexe_biginteger_to_curv_bigint(&Self::Params::R);
+        let R2_inv = R2.invert(&FE::q()).unwrap();
+        let mg_fix = BigInt::mod_mul(&mg, &R2_inv, &FE::q());
+        FpCurv(ECScalar::from(&mg_fix))
     }
 
     #[inline]
     fn root_of_unity() -> Self {
         let rou_bn = zexe_biginteger_to_curv_bigint(&Self::Params::ROOT_OF_UNITY);
-        FpCurv(ECScalar::from(&rou_bn))
+        let R2 = zexe_biginteger_to_curv_bigint(&Self::Params::R);
+        let R2_inv = R2.invert(&FE::q()).unwrap();
+        let rou_bn_fix = BigInt::mod_mul(&rou_bn, &R2_inv, &FE::q());
+        FpCurv(ECScalar::from(&rou_bn_fix))
 
     }
 
@@ -837,5 +852,55 @@ impl FpParameters for JubjubParameters {
     ]);
 }
 
+
+#[cfg(test)]
+mod tests {
+
+    use curv::{FE,BigInt};
+    use curv::elliptic::curves::traits::ECScalar;
+    use crate::BigInteger256 as BigInteger;
+    use curv::arithmetic::traits::Converter;
+    use crate::FpCurv;
+    use crate::PrimeField;
+    use crate::Field;
+    use num_traits::identities::One;
+
+    #[test]
+    fn test_primefield_from_into_repr() {
+
+        let fe : FE =ECScalar::new_random();
+        let fp_curv = FpCurv(fe);
+        let fp_to_repr = PrimeField::into_repr(&fp_curv);
+        let fp_from_repr = PrimeField::from_repr(fp_to_repr);
+        assert_eq!(fp_curv, fp_from_repr);
+    }
+    #[test]
+    fn test_square() {
+        let fe : FE =ECScalar::new_random();
+        let mut fp_curv = FpCurv(fe);
+        let fp_curv_1 = fp_curv.clone();
+        fp_curv.square_in_place();
+        let fp_curv_2 = fp_curv_1 * fp_curv_1;
+        assert_eq!(fp_curv, fp_curv_2);
+    }
+
+    #[test]
+    fn test_inv() {
+        let size_as_bigint = BigInteger::from(2u64);
+        let size_as_field_element = FpCurv::from_repr(size_as_bigint);
+        let size_inv = size_as_field_element.inverse().unwrap();
+        let size_inv_2 = size_inv.inverse().unwrap();
+        assert_eq!(size_as_field_element, size_inv_2);
+    }
+
+    #[test]
+    fn test_one() {
+        let one_bigint = BigInteger::from(1u64);
+        let fp1 = FpCurv::from_repr(one_bigint);
+        let fp2 = FpCurv::one();
+        assert_eq!(fp1, fp2);
+    }
+
+}
 
 
