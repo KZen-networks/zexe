@@ -134,16 +134,16 @@ impl Hash for FpCurv {
 
 impl UniformRand for FpCurv {
     fn rand<R: Rng + ?Sized>(rng: &mut R) -> Self{
-        FpCurv(ECScalar::new_random())
+
+        let mut bytes = [0u8;32];
+        bytes  = rng.sample(Standard);
+        let bn = BigInt::from(&bytes[..]);
+        let fe : FE = ECScalar::from(&bn);
+
+        FpCurv(fe)
     }
 }
-/*
-impl Distribution<FpCurv> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FpCurv {
-        FpCurv(ECScalar::new_random())
-    }
-}
-*/
+
 
 impl CanonicalDeserialize for FpCurv {
     #[inline]
