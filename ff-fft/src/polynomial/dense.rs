@@ -104,8 +104,6 @@ impl<F: Field> DensePolynomial<F> {
             powers_of_point.push(cur);
             cur *= &point;
         }
-        println!("power of points: {:?}", powers_of_point.len());
-        println!("self.coeffs: {:?}", self.coeffs.len());
 
         assert_eq!(powers_of_point.len(), self.coeffs.len());
         cfg_into_iter!(powers_of_point)

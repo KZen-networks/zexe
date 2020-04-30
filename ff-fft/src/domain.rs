@@ -84,6 +84,7 @@ impl<F: PrimeField> EvaluationDomain<F> {
     pub fn new(num_coeffs: usize) -> Option<Self> {
         // Compute the size of our evaluation domain
         let size = num_coeffs.next_power_of_two() as u64;
+        println!("size: {:?}", size.clone());
         let log_size_of_group = size.trailing_zeros();
 
         if log_size_of_group >= F::Params::TWO_ADICITY {
@@ -453,18 +454,21 @@ impl<F: PrimeField> Iterator for Elements<F> {
 #[cfg(test)]
 mod tests {
     use crate::EvaluationDomain;
-    use algebra::bls12_381::Fr;
+   // use algebra::bls12_381::Fr;
+    use algebra::FpCurv;
+    use algebra_core::UniformRand;
     use algebra_core::{test_rng, Field, Zero};
-    use rand::Rng;
+   // use rand::Rng;
 
     #[test]
     fn vanishing_polynomial_evaluation() {
         let rng = &mut test_rng();
         for coeffs in 0..10 {
-            let domain = EvaluationDomain::<Fr>::new(coeffs).unwrap();
+            let domain = EvaluationDomain::<FpCurv>::new(coeffs).unwrap();
             let z = domain.vanishing_polynomial();
             for _ in 0..100 {
-                let point = rng.gen();
+             //   let point = rng.gen();
+                let point = FpCurv::rand(&mut test_rng());
                 assert_eq!(
                     z.evaluate(point),
                     domain.evaluate_vanishing_polynomial(point)
@@ -475,8 +479,8 @@ mod tests {
 
     #[test]
     fn vanishing_polynomial_vanishes_on_domain() {
-        for coeffs in 0..1000 {
-            let domain = EvaluationDomain::<Fr>::new(coeffs).unwrap();
+        for coeffs in 0..100 {
+            let domain = EvaluationDomain::<FpCurv>::new(coeffs).unwrap();
             let z = domain.vanishing_polynomial();
             for point in domain.elements() {
                 assert!(z.evaluate(point).is_zero())
@@ -488,7 +492,7 @@ mod tests {
     fn size_of_elements() {
         for coeffs in 1..10 {
             let size = 1 << coeffs;
-            let domain = EvaluationDomain::<Fr>::new(size).unwrap();
+            let domain = EvaluationDomain::<FpCurv>::new(size).unwrap();
             let domain_size = domain.size();
             assert_eq!(domain_size, domain.elements().count());
         }
@@ -498,7 +502,7 @@ mod tests {
     fn elements_contents() {
         for coeffs in 1..10 {
             let size = 1 << coeffs;
-            let domain = EvaluationDomain::<Fr>::new(size).unwrap();
+            let domain = EvaluationDomain::<FpCurv>::new(size).unwrap();
             for (i, element) in domain.elements().enumerate() {
                 assert_eq!(element, domain.group_gen.pow([i as u64]));
             }
