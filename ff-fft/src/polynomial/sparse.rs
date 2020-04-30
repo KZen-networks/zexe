@@ -58,6 +58,9 @@ impl<F: Field> SparsePolynomial<F> {
     /// Constructs a new polynomial from a list of coefficients.
     pub fn from_coefficients_vec(mut coeffs: Vec<(usize, F)>) -> Self {
         // While there are zeros at the end of the coefficient vector, pop them off.
+        println!("coeff: {:?}",  coeffs.len());
+        println!("coeffs: {:?}",  coeffs.clone());
+
         while coeffs.last().map_or(false, |(_, c)| c.is_zero()) {
             coeffs.pop();
         }
@@ -137,19 +140,20 @@ impl<F: Field> Into<DensePolynomial<F>> for SparsePolynomial<F> {
 #[cfg(test)]
 mod tests {
     use crate::{DensePolynomial, EvaluationDomain, SparsePolynomial};
-    use algebra::bls12_381::fr::Fr;
+    //use algebra::bls12_381::fr::Fr;
+    use algebra::FpCurv;
     use algebra_core::One;
 
     #[test]
     fn evaluate_over_domain() {
-        for size in 2..10 {
+        for size in 2..3 {
             let domain_size = 1 << size;
             let domain = EvaluationDomain::new(domain_size).unwrap();
-            let two = Fr::one() + &Fr::one();
+            let two = FpCurv::one() + &FpCurv::one();
             let sparse_poly = SparsePolynomial::from_coefficients_vec(vec![(0, two), (1, two)]);
             let evals1 = sparse_poly.evaluate_over_domain_by_ref(domain);
 
-            let dense_poly: DensePolynomial<Fr> = sparse_poly.into();
+            let dense_poly: DensePolynomial<FpCurv> = sparse_poly.into();
             let evals2 = dense_poly.clone().evaluate_over_domain(domain);
             assert_eq!(evals1.clone().interpolate(), evals2.clone().interpolate());
             assert_eq!(evals1.interpolate(), dense_poly);

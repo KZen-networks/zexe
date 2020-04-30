@@ -29,3 +29,6 @@ pub use self::fp6_3over2::*;
 
 pub mod fp12_2over3over2;
 pub use self::fp12_2over3over2::*;
+
+pub mod fp_curv;
+pub use self::fp_curv::*;

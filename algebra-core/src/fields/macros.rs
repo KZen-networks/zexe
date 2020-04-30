@@ -662,6 +662,8 @@ macro_rules! impl_prime_field_from_int {
     };
 }
 
+
+
 macro_rules! sqrt_impl {
     ($Self:ident, $P:tt, $self:expr) => {{
         use crate::fields::LegendreSymbol::*;
