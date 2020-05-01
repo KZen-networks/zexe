@@ -12,7 +12,6 @@ use crate::{
     UniformRand,
 };
 use crate::{
- //   biginteger::{arithmetic as fa, BigInteger as _BigInteger, BigInteger256 as BigInteger},
     BigInteger256 as BigInteger,
     bytes::{FromBytes, ToBytes},
     fields::{Field, FpParameters, LegendreSymbol, PrimeField, SquareRootField},
@@ -39,85 +38,7 @@ PartialEq(bound = ""),
 Eq(bound = "")
 )]
 pub struct FpCurv(pub FE);
-/*
-impl FpCurv {
-    #[inline]
-    pub const fn new(element: BigInteger) -> Self {
-        Self(element, PhantomData)
-    }
-}
 
-*/
-
-/*
-impl<P: Fp256Parameters> Fp256<P> {
-    #[inline]
-    fn is_valid(&self) -> bool {
-        self.0 < P::MODULUS
-    }
-
-    #[inline]
-    fn reduce(&mut self) {
-        if !self.is_valid() {
-            self.0.sub_noborrow(&P::MODULUS);
-        }
-    }
-
-    #[inline]
-    fn mont_reduce(
-        &mut self,
-        r0: u64,
-        mut r1: u64,
-        mut r2: u64,
-        mut r3: u64,
-        mut r4: u64,
-        mut r5: u64,
-        mut r6: u64,
-        mut r7: u64,
-    ) {
-        // The Montgomery reduction here is based on Algorithm 14.32 in
-        // Handbook of Applied Cryptography
-        // <http://cacr.uwaterloo.ca/hac/about/chap14.pdf>.
-
-        let k = r0.wrapping_mul(P::INV);
-        let mut carry = 0;
-        fa::mac_with_carry(r0, k, P::MODULUS.0[0], &mut carry);
-        r1 = fa::mac_with_carry(r1, k, P::MODULUS.0[1], &mut carry);
-        r2 = fa::mac_with_carry(r2, k, P::MODULUS.0[2], &mut carry);
-        r3 = fa::mac_with_carry(r3, k, P::MODULUS.0[3], &mut carry);
-        r4 = fa::adc(r4, 0, &mut carry);
-        let carry2 = carry;
-        let k = r1.wrapping_mul(P::INV);
-        let mut carry = 0;
-        fa::mac_with_carry(r1, k, P::MODULUS.0[0], &mut carry);
-        r2 = fa::mac_with_carry(r2, k, P::MODULUS.0[1], &mut carry);
-        r3 = fa::mac_with_carry(r3, k, P::MODULUS.0[2], &mut carry);
-        r4 = fa::mac_with_carry(r4, k, P::MODULUS.0[3], &mut carry);
-        r5 = fa::adc(r5, carry2, &mut carry);
-        let carry2 = carry;
-        let k = r2.wrapping_mul(P::INV);
-        let mut carry = 0;
-        fa::mac_with_carry(r2, k, P::MODULUS.0[0], &mut carry);
-        r3 = fa::mac_with_carry(r3, k, P::MODULUS.0[1], &mut carry);
-        r4 = fa::mac_with_carry(r4, k, P::MODULUS.0[2], &mut carry);
-        r5 = fa::mac_with_carry(r5, k, P::MODULUS.0[3], &mut carry);
-        r6 = fa::adc(r6, carry2, &mut carry);
-        let carry2 = carry;
-        let k = r3.wrapping_mul(P::INV);
-        let mut carry = 0;
-        fa::mac_with_carry(r3, k, P::MODULUS.0[0], &mut carry);
-        r4 = fa::mac_with_carry(r4, k, P::MODULUS.0[1], &mut carry);
-        r5 = fa::mac_with_carry(r5, k, P::MODULUS.0[2], &mut carry);
-        r6 = fa::mac_with_carry(r6, k, P::MODULUS.0[3], &mut carry);
-        r7 = fa::adc(r7, carry2, &mut carry);
-        (self.0).0[0] = r4;
-        (self.0).0[1] = r5;
-        (self.0).0[2] = r6;
-        (self.0).0[3] = r7;
-        self.reduce();
-    }
-}
-*/
 impl Default for FpCurv {
     fn default() -> Self {
         FpCurv(FE::zero())
@@ -127,8 +48,6 @@ impl Default for FpCurv {
 impl Hash for FpCurv {
     fn hash<H: Hasher>(&self, state: &mut H) {
         unimplemented!();
- //       let zero :u32 = 0;
- //       zero.hash(state);
     }
 }
 
@@ -207,19 +126,7 @@ impl CanonicalSerialize for FpCurv {
         Self::SERIALIZED_SIZE
     }
 }
-/*
-    /// Serializes `self` into `writer` without compression.
-    #[inline]
-    fn serialize_uncompressed<W: Write>(&self, writer: &mut W) -> Result<(), SerializationError> {
-        self.serialize(writer)
-    }
-    #[inline]
-    fn uncompressed_size(&self) -> usize {
-        self.serialized_size()
-    }
 
-}
-*/
 impl Zero for FpCurv {
     #[inline]
     fn zero() -> Self {
@@ -331,7 +238,6 @@ fn zexe_biginteger_to_curv_bigint(src: &BigInteger) -> BigInt{
     let mut bytes: Vec<u8> = Vec::new();
     src.write( &mut bytes).unwrap();
     bytes.reverse();
-   // src.serialize(&mut bytes);
     BigInt::from(&bytes[..])
 
 }
@@ -341,17 +247,13 @@ fn curv_bigint_to_zexe_biginteger(src: &BigInt) -> BigInteger{
     let mut bytes = BigInt::to_vec(src);
     bytes.reverse();
     let cur = Cursor::new(bytes);
-    //let value = BigInteger::from(&bytes[..]);
-  //  let buf = [0u8;32];
-  //  buf.copy_from_slice(&bytes[..]);
     let value = BigInteger::read(cur).unwrap();
-    //BigInteger::read(bytes)
     value
 
 }
 
 impl PrimeField for FpCurv {
-    type Params = JubjubParameters;
+    type Params = BLS12381Parameters;
     type BigInt = BigInteger;
 
     #[inline]
@@ -391,40 +293,6 @@ impl PrimeField for FpCurv {
 
 }
 
-
-/*
-impl<P: Fp256Parameters> SquareRootField for Fp256<P> {
-    #[inline]
-    fn legendre(&self) -> LegendreSymbol {
-        use crate::fields::LegendreSymbol::*;
-
-        // s = self^((MODULUS - 1) // 2)
-        let s = self.pow(P::MODULUS_MINUS_ONE_DIV_TWO);
-        if s.is_zero() {
-            Zero
-        } else if s.is_one() {
-            QuadraticResidue
-        } else {
-            QuadraticNonResidue
-        }
-    }
-
-    // Only works for p = 1 (mod 16).
-    #[inline]
-    fn sqrt(&self) -> Option<Self> {
-        sqrt_impl!(Self, P, self)
-    }
-
-    fn sqrt_in_place(&mut self) -> Option<&mut Self> {
-        if let Some(sqrt) = self.sqrt() {
-            *self = sqrt;
-            Some(self)
-        } else {
-            None
-        }
-    }
-}
-*/
 
 impl Into<BigInteger> for FpCurv{
     fn into(self) -> BigInteger{
@@ -471,46 +339,11 @@ impl From<u64> for FpCurv{
     }
 }
 
-/*
-macro_rules! impl_fp_curv_prime_field_from_int {
-    ($field: ident, u128,$params: ident) => {
-        impl<P: $params>  From<u128> for $field {
-            fn from(other: u128) -> Self {
-                let upper = (other >> 64) as u64;
-                let lower = ((other << 64) >> 64) as u64;
-                let mut default_int = BigInt::default();
-                default_int.0[0] = lower;
-                default_int.0[1] = upper;
-                Self::from_repr(default_int)
-            }
-        }
-    };
-    ($field: ident, $int: ident,$params: ident) => {
-        impl<P: $params>  From<$int> for $field {
-            fn from(other: $int) -> Self {
-                Self::from_repr(P::BigInt::from(u64::from(other)))
-            }
-        }
-    };
-}
-*/
-/*
-impl_prime_field_from_int!(FpCurv, u128, FpParameters);
-impl_prime_field_from_int!(FpCurv, u64, FpParameters);
-impl_prime_field_from_int!(FpCurv, u32, FpParameters);
-impl_prime_field_from_int!(FpCurv, u16, FpParameters);
-impl_prime_field_from_int!(FpCurv, u8, FpParameters);
-*/
-/*
-impl_prime_field_standard_sample!(Fp256, Fp256Parameters);
-*/
 //TODO
 impl ToBytes for FpCurv {
     #[inline]
     fn write<W: Write>(&self,mut writer: W) -> IoResult<()> {
-       // let bn = self.0.to_big_int();
-       // let bytes = BigInt::to_vec(&bn);
-       // write!(writer, "{}", &bytes[..])
+
 
         let bn = self.0.to_big_int();
         let bytes = BigInt::to_vec(&bn);
@@ -764,9 +597,9 @@ iter.fold(Self::one(), |acc,x | FpCurv(acc.0 * x.0))
 
 
 
-pub struct JubjubParameters;
+pub struct BLS12381Parameters;
 
-impl FpParameters for JubjubParameters {
+impl FpParameters for BLS12381Parameters {
     type BigInt = BigInteger;
 
     // MODULUS = 52435875175126190479447740508185965837690552500527637822603658699938581184513
